@@ -1,0 +1,14 @@
+defaults:
+  initial_capital: 100000
+  commission_bps: 3.0
+  slippage_bps: 5.0
+  exchange: NSE
+  data_source: yfinance
+
+paths:
+  database: data/backtest.db
+  cache_dir: data/cache
+
+data:
+  default_interval: 1d
+  default_lookback_years: 3

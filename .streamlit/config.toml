@@ -1,0 +1,13 @@
+# Streamlit configuration.
+#
+# fileWatcherType=none disables auto-reload on file changes. On a network
+# share (Z:\), the watcher's constant SMB stat calls add measurable latency
+# to every interaction. Tradeoff: edits to .py files won't reload
+# automatically — press R in the browser or click "Rerun" to refresh.
+#
+# port=8765 avoids Streamlit's default 8501, which collides with Cursor IDE
+# (Cursor binds 8501 for its internal services).
+
+[server]
+fileWatcherType = "none"
+port = 8765

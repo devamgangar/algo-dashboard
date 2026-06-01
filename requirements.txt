@@ -1,0 +1,9 @@
+streamlit>=1.30.0
+pandas>=2.0.0
+numpy>=1.24.0,<2.0
+yfinance>=0.2.40
+vectorbt>=0.26.0
+SQLAlchemy>=2.0.0
+pyarrow>=14.0.0
+plotly>=5.18.0
+PyYAML>=6.0
