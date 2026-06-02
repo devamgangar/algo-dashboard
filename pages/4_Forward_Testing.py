@@ -11,9 +11,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import pandas as pd  # noqa: E402
 import streamlit as st  # noqa: E402
 
+from core.analytics.benchmark import attach_benchmark  # noqa: E402
 from core.analytics.plots import drawdown_chart, equity_curve_chart  # noqa: E402
 from core.strategies import list_strategies  # noqa: E402
-from core.ui import inject_base_style, page_header  # noqa: E402
+from core.ui import (  # noqa: E402
+    inject_base_style,
+    page_header,
+    render_benchmark_panel,
+    select_strategy_or_preset,
+)
 from db import repository as repo  # noqa: E402
 from services.forward_service import (  # noqa: E402
     start_forward_run,
@@ -35,19 +41,16 @@ page_header(
 # ─── Strategy + config (start new run) ──────────────────────────────────────
 with st.expander("Start a new forward run", expanded=False):
     strategies = list_strategies()
-    strategy_lookup = {c.name: c for c in strategies}
+    presets = repo.list_presets()
 
     s_col_1, s_col_2 = st.columns(2)
     with s_col_1:
-        strategy_name = st.selectbox(
-            "Strategy",
-            options=[c.name for c in strategies],
-            format_func=lambda n: f"{strategy_lookup[n].display_name} (v{strategy_lookup[n].version})",
-            key="fwd_strategy",
+        strategy_cls, initial_params, source_label = select_strategy_or_preset(
+            strategies, presets, key="fwd_strategy_select",
         )
-    strategy_cls = strategy_lookup[strategy_name]
+        strategy_name = strategy_cls.name
     with s_col_2:
-        st.caption(strategy_cls.description or "")
+        st.caption(f"{source_label}. {strategy_cls.description or ''}")
 
     d_col, c_col = st.columns(2)
     with d_col:
@@ -72,19 +75,20 @@ with st.expander("Start a new forward run", expanded=False):
             "Risk-free rate (% per year)", value=6.5, step=0.25, key="fwd_rfr",
         )
 
-    st.markdown("**Strategy parameters** (locked at creation; can't be changed later)")
+    st.markdown("**Strategy parameters** (pre-filled from selection; locked once the forward run is created)")
     p_cols = st.columns(max(1, len(strategy_cls.default_params)))
     fwd_params: dict = {}
     for i, (pkey, pdefault) in enumerate(strategy_cls.default_params.items()):
+        starting = initial_params.get(pkey, pdefault)
         with p_cols[i % len(p_cols)]:
             if isinstance(pdefault, bool):
-                fwd_params[pkey] = st.checkbox(pkey, value=pdefault, key=f"fwd_p_{pkey}")
+                fwd_params[pkey] = st.checkbox(pkey, value=bool(starting), key=f"fwd_p_{pkey}")
             elif isinstance(pdefault, int):
-                fwd_params[pkey] = int(st.number_input(pkey, value=pdefault, step=1, key=f"fwd_p_{pkey}"))
+                fwd_params[pkey] = int(st.number_input(pkey, value=int(starting), step=1, key=f"fwd_p_{pkey}"))
             elif isinstance(pdefault, float):
-                fwd_params[pkey] = float(st.number_input(pkey, value=pdefault, step=0.1, key=f"fwd_p_{pkey}"))
+                fwd_params[pkey] = float(st.number_input(pkey, value=float(starting), step=0.1, key=f"fwd_p_{pkey}"))
             else:
-                fwd_params[pkey] = st.text_input(pkey, value=str(pdefault), key=f"fwd_p_{pkey}")
+                fwd_params[pkey] = st.text_input(pkey, value=str(starting), key=f"fwd_p_{pkey}")
 
     if st.button("Start Forward Run", type="primary", key="fwd_start"):
         try:
@@ -247,11 +251,32 @@ with act_col_r:
 
 # Charts
 if not eq.empty:
+    # Benchmark overlay — fetched from the start_date of the forward run
+    bench_series, bench_metrics = None, None
+    try:
+        eq_end_ts = pd.to_datetime(eq["timestamp"].iloc[-1]).date()
+        bench_series, bench_metrics = attach_benchmark(
+            equity_df=eq,
+            initial_capital=detail["initial_capital"],
+            start_date=detail["start_date"],
+            end_date=eq_end_ts,
+            risk_free_rate=detail["risk_free_rate"],
+            interval=detail["interval"],
+        )
+    except Exception:
+        pass
+
     st.plotly_chart(
-        equity_curve_chart(eq, initial_capital=detail["initial_capital"],
-                           title=f"Forward equity since {detail['start_date']}"),
+        equity_curve_chart(
+            eq, initial_capital=detail["initial_capital"],
+            title=f"Forward equity since {detail['start_date']}",
+            benchmark_series=bench_series,
+        ),
         width="stretch",
     )
+    if bench_metrics is not None:
+        with st.container(border=True):
+            render_benchmark_panel(bench_metrics)
     st.plotly_chart(drawdown_chart(eq), width="stretch")
 
 # Trade log

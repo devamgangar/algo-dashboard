@@ -64,6 +64,13 @@ st.markdown(_feature(
 ), unsafe_allow_html=True)
 
 st.markdown(_feature(
+    "Portfolio + Portfolio Results",
+    "Deploy one strategy across a basket (NIFTY 50). Shared cash pool; each entry "
+    "sized as a fixed % of initial capital; cash-constrained allocation. "
+    "Past portfolio runs browse / detail / comparison on a dedicated tab."
+), unsafe_allow_html=True)
+
+st.markdown(_feature(
     "Forward Testing",
     "Paper-trade strategies against unfolding daily yfinance data. Virtual portfolio "
     "with equity curve, refreshable manually or via scheduled daily ticks."

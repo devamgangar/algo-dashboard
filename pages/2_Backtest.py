@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import pandas as pd  # noqa: E402
 import streamlit as st  # noqa: E402
 
+from core.analytics.benchmark import attach_benchmark  # noqa: E402
 from core.analytics.metrics import metrics_to_table  # noqa: E402
 from core.analytics.plots import (  # noqa: E402
     drawdown_chart,
@@ -23,7 +24,13 @@ from core.analytics.plots import (  # noqa: E402
 )
 from core.data import get_ohlcv  # noqa: E402
 from core.strategies import list_strategies  # noqa: E402
-from core.ui import inject_base_style, page_header  # noqa: E402
+from core.ui import (  # noqa: E402
+    inject_base_style,
+    page_header,
+    render_benchmark_panel,
+    select_strategy_or_preset,
+)
+from db import repository as repo  # noqa: E402
 from services.backtest_service import run_and_save  # noqa: E402
 
 
@@ -47,17 +54,12 @@ if not strategies:
     st.error("No strategies registered. Add one under core/strategies/ and update __init__.py.")
     st.stop()
 
-strategy_name_to_display = {c.name: f"{c.display_name} (v{c.version})" for c in strategies}
-strategy_lookup = {c.name: c for c in strategies}
-
-strategy_name = st.selectbox(
-    "Strategy",
-    options=list(strategy_name_to_display.keys()),
-    format_func=lambda n: strategy_name_to_display[n],
-    key="strategy_select",
+presets = repo.list_presets()
+strategy_cls, initial_params, source_label = select_strategy_or_preset(
+    strategies, presets, key="bt_strategy_select",
 )
-strategy_cls = strategy_lookup[strategy_name]
-st.caption(strategy_cls.description or "")
+strategy_name = strategy_cls.name
+st.caption(f"{source_label}. {strategy_cls.description or ''}")
 
 
 # ─── The rest of the inputs ──────────────────────────────────────────────────
@@ -95,18 +97,20 @@ with col_exec:
 
 st.divider()
 st.subheader("Strategy parameters")
+st.caption("Pre-filled from the selected strategy/preset. Tweak per-run without modifying the saved preset.")
 param_cols = st.columns(max(1, len(strategy_cls.default_params)))
 params: dict = {}
 for i, (key, default) in enumerate(strategy_cls.default_params.items()):
+    starting = initial_params.get(key, default)
     with param_cols[i % len(param_cols)]:
         if isinstance(default, bool):
-            params[key] = st.checkbox(key, value=default)
+            params[key] = st.checkbox(key, value=bool(starting))
         elif isinstance(default, int):
-            params[key] = int(st.number_input(key, value=default, step=1))
+            params[key] = int(st.number_input(key, value=int(starting), step=1))
         elif isinstance(default, float):
-            params[key] = float(st.number_input(key, value=default, step=0.1))
+            params[key] = float(st.number_input(key, value=float(starting), step=0.1))
         else:
-            params[key] = st.text_input(key, value=str(default))
+            params[key] = st.text_input(key, value=str(starting))
 
 st.divider()
 
@@ -148,10 +152,35 @@ def _show_results(run_id: int, result, from_cache: bool) -> None:
     m2[2].metric("Exposure",          f"{e.get('exposure_pct', 0):.1f}%")
     m2[3].metric("Excess vs RFR",     f"{e.get('excess_return_vs_rfr', 0)*100:+.2f}%")
 
+    # Benchmark overlay (NIFTY 50)
+    bench_series, bench_metrics, bench_error = None, None, None
+    try:
+        bench_series, bench_metrics = attach_benchmark(
+            equity_df=result.equity_curve,
+            initial_capital=result.initial_capital,
+            start_date=result.start_date,
+            end_date=result.end_date,
+            risk_free_rate=result.risk_free_rate,
+            interval=result.interval,
+        )
+        if bench_series is None:
+            bench_error = "Benchmark data unavailable for this period (yfinance returned no data for ^NSEI)."
+    except Exception as exc:
+        bench_error = f"Benchmark fetch failed: {exc}"
+
     st.plotly_chart(
-        equity_curve_chart(result.equity_curve, initial_capital=result.initial_capital),
+        equity_curve_chart(
+            result.equity_curve,
+            initial_capital=result.initial_capital,
+            benchmark_series=bench_series,
+        ),
         width="stretch",
     )
+    if bench_metrics is not None:
+        with st.container(border=True):
+            render_benchmark_panel(bench_metrics)
+    elif bench_error is not None:
+        st.info(bench_error)
     st.plotly_chart(drawdown_chart(result.equity_curve), width="stretch")
 
     # Price + signal overlay — re-fetch OHLCV from cache (typically <50ms hit).

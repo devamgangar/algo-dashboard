@@ -14,16 +14,33 @@ def equity_curve_chart(
     initial_capital: float | None = None,
     title: str = "Equity Curve",
     height: int = 380,
+    benchmark_series: pd.Series | None = None,
+    benchmark_label: str = "NIFTY 50 buy & hold",
 ) -> go.Figure:
-    """Single-run equity over time. Optionally shows initial-capital baseline."""
+    """Single-run equity over time.
+
+    Optionally shows:
+      - initial-capital horizontal baseline
+      - benchmark buy-and-hold equity overlay (e.g., NIFTY 50)
+    """
     fig = go.Figure()
     fig.add_trace(go.Scatter(
         x=equity_df["timestamp"],
         y=equity_df["equity"],
-        name="Equity",
+        name="Strategy",
         line=dict(color="#1f77b4", width=2),
-        hovertemplate="%{x|%Y-%m-%d}<br>₹%{y:,.0f}<extra></extra>",
+        hovertemplate="Strategy<br>%{x|%Y-%m-%d}<br>₹%{y:,.0f}<extra></extra>",
     ))
+    if benchmark_series is not None and not benchmark_series.empty:
+        fig.add_trace(go.Scatter(
+            x=benchmark_series.index,
+            y=benchmark_series.values,
+            name=benchmark_label,
+            line=dict(color="#94a3b8", width=1.5, dash="dot"),
+            hovertemplate=(
+                f"{benchmark_label}<br>%{{x|%Y-%m-%d}}<br>₹%{{y:,.0f}}<extra></extra>"
+            ),
+        ))
     if initial_capital is not None:
         fig.add_hline(
             y=initial_capital,
@@ -38,6 +55,7 @@ def equity_curve_chart(
         hovermode="x unified",
         height=height,
         margin=dict(l=40, r=20, t=50, b=30),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     )
     return fig
 

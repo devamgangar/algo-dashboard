@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import pandas as pd  # noqa: E402
 import streamlit as st  # noqa: E402
 
+from core.analytics.benchmark import attach_benchmark  # noqa: E402
 from core.analytics.metrics import metrics_to_table  # noqa: E402
 from core.analytics.plots import (  # noqa: E402
     drawdown_chart,
@@ -18,7 +19,7 @@ from core.analytics.plots import (  # noqa: E402
     price_with_signals_chart,
 )
 from core.data import get_ohlcv  # noqa: E402
-from core.ui import inject_base_style, page_header  # noqa: E402
+from core.ui import inject_base_style, page_header, render_benchmark_panel  # noqa: E402
 from db import repository as repo  # noqa: E402
 
 st.set_page_config(page_title="Results", layout="wide")
@@ -190,10 +191,35 @@ def _show_detail(run_id: int) -> None:
     m2[2].metric("Exposure",      f"{e.get('exposure_pct', 0):.1f}%")
     m2[3].metric("Excess vs RFR", f"{e.get('excess_return_vs_rfr', 0)*100:+.2f}%")
 
+    # Benchmark overlay (NIFTY 50)
+    bench_series, bench_metrics, bench_error = None, None, None
+    try:
+        bench_series, bench_metrics = attach_benchmark(
+            equity_df=full["equity_curve"],
+            initial_capital=full["initial_capital"],
+            start_date=full["start_date"],
+            end_date=full["end_date"],
+            risk_free_rate=full["risk_free_rate"],
+            interval=full["interval"],
+        )
+        if bench_series is None:
+            bench_error = "Benchmark data unavailable for this period."
+    except Exception as exc:
+        bench_error = f"Benchmark fetch failed: {exc}"
+
     st.plotly_chart(
-        equity_curve_chart(full["equity_curve"], initial_capital=full["initial_capital"]),
+        equity_curve_chart(
+            full["equity_curve"],
+            initial_capital=full["initial_capital"],
+            benchmark_series=bench_series,
+        ),
         width="stretch",
     )
+    if bench_metrics is not None:
+        with st.container(border=True):
+            render_benchmark_panel(bench_metrics)
+    elif bench_error is not None:
+        st.info(bench_error)
     st.plotly_chart(drawdown_chart(full["equity_curve"]), width="stretch")
 
     # Price + signal overlay — re-fetch OHLCV from cache (typically <50ms hit).

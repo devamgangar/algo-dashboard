@@ -13,7 +13,8 @@ import streamlit as st  # noqa: E402
 
 from core.analytics.plots import metric_heatmap  # noqa: E402
 from core.strategies import list_strategies  # noqa: E402
-from core.ui import inject_base_style, page_header  # noqa: E402
+from core.ui import inject_base_style, page_header, select_strategy_or_preset  # noqa: E402
+from db import repository as repo  # noqa: E402
 from services.sweep_service import run_sweep_and_collect  # noqa: E402
 
 
@@ -32,14 +33,12 @@ if not strategies:
     st.error("No strategies registered.")
     st.stop()
 
-strategy_lookup = {c.name: c for c in strategies}
-strategy_name = st.selectbox(
-    "Strategy",
-    options=[c.name for c in strategies],
-    format_func=lambda n: f"{strategy_lookup[n].display_name} (v{strategy_lookup[n].version})",
+presets = repo.list_presets()
+strategy_cls, initial_params, source_label = select_strategy_or_preset(
+    strategies, presets, key="sweep_strategy_select",
 )
-strategy_cls = strategy_lookup[strategy_name]
-st.caption(strategy_cls.description or "")
+strategy_name = strategy_cls.name
+st.caption(f"{source_label}. {strategy_cls.description or ''}")
 
 # Only numeric params are sweepable (int or float, excluding bool).
 numeric_params = {
@@ -84,17 +83,24 @@ param_grid: dict[str, list] = {}
 
 for pname, default in numeric_params.items():
     is_int = isinstance(default, int)
+    # Starting value comes from preset if one is selected, else strategy default.
+    starting = initial_params.get(pname, default)
+    if is_int:
+        starting = int(starting)
+    else:
+        starting = float(starting)
+
     with st.container():
         cols = st.columns([1, 1, 1, 1, 1])
-        cols[0].markdown(f"**{pname}** _(default: {default})_")
+        cols[0].markdown(f"**{pname}** _(current: {starting})_")
         enable = cols[1].checkbox("sweep", value=False, key=f"sw_{pname}")
         if enable:
             if is_int:
                 lo = int(cols[2].number_input(
-                    f"min {pname}", value=max(2, default // 2), step=1, key=f"lo_{pname}",
+                    f"min {pname}", value=max(2, starting // 2), step=1, key=f"lo_{pname}",
                 ))
                 hi = int(cols[3].number_input(
-                    f"max {pname}", value=default * 2, step=1, key=f"hi_{pname}",
+                    f"max {pname}", value=starting * 2, step=1, key=f"hi_{pname}",
                 ))
                 step = int(cols[4].number_input(
                     f"step {pname}", value=max(1, (hi - lo) // 5 or 1),
@@ -105,10 +111,10 @@ for pname, default in numeric_params.items():
                 values = list(range(lo, hi + 1, step))
             else:
                 lo = float(cols[2].number_input(
-                    f"min {pname}", value=float(default) * 0.5, step=0.1, key=f"lo_{pname}",
+                    f"min {pname}", value=starting * 0.5, step=0.1, key=f"lo_{pname}",
                 ))
                 hi = float(cols[3].number_input(
-                    f"max {pname}", value=float(default) * 2.0, step=0.1, key=f"hi_{pname}",
+                    f"max {pname}", value=starting * 2.0, step=0.1, key=f"hi_{pname}",
                 ))
                 step = float(cols[4].number_input(
                     f"step {pname}", value=0.5, step=0.1, min_value=0.01, key=f"st_{pname}",
@@ -120,9 +126,9 @@ for pname, default in numeric_params.items():
                 while v <= hi + 1e-9:
                     values.append(round(v, 6))
                     v += step
-            param_grid[pname] = values if values else [default]
+            param_grid[pname] = values if values else [starting]
         else:
-            param_grid[pname] = [default]
+            param_grid[pname] = [starting]
 
 
 # ─── Combo count + metric selector ──────────────────────────────────────────
