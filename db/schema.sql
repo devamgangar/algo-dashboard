@@ -90,6 +90,19 @@ CREATE TABLE IF NOT EXISTS run_metrics (
     PRIMARY KEY (run_id, metric_name)
 );
 
+-- ─── Strategy presets (user-defined param bundles) ──────
+-- Each preset = (base strategy name) + (custom params override) + (display name).
+-- Appears alongside base strategies in the Backtest/Sweep/Forward dropdowns.
+CREATE TABLE IF NOT EXISTS strategy_presets (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    name            TEXT    NOT NULL UNIQUE,    -- "Aggressive SMA on smalls"
+    base_strategy   TEXT    NOT NULL,           -- "sma_crossover" (logical ref to strategy registry key)
+    params          TEXT    NOT NULL,           -- JSON
+    description     TEXT,
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_presets_base ON strategy_presets(base_strategy);
+
 -- ─── Symbol universe ────────────────────────────────────
 CREATE TABLE IF NOT EXISTS universe (
     symbol          TEXT    NOT NULL,
@@ -103,6 +116,73 @@ CREATE TABLE IF NOT EXISTS universe (
     PRIMARY KEY (symbol, exchange)
 );
 CREATE INDEX IF NOT EXISTS idx_universe_active ON universe(is_active);
+
+-- ─── Portfolio backtests (one strategy across multiple symbols) ─────
+-- A portfolio run applies one strategy to a basket of symbols with a shared
+-- cash pool. Each signal triggers a new position sized as N% of current
+-- equity (compounding). Cash-constrained: signals are skipped when funds
+-- are tied up in existing positions.
+
+CREATE TABLE IF NOT EXISTS portfolio_runs (
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    strategy_id           INTEGER NOT NULL REFERENCES strategies(id),
+    universe_label        TEXT    NOT NULL,    -- "NIFTY 50" / custom label
+    symbols               TEXT    NOT NULL,    -- JSON array of actual tickers used
+    exchange              TEXT    NOT NULL DEFAULT 'NSE',
+    interval              TEXT    NOT NULL DEFAULT '1d',
+    data_source           TEXT    NOT NULL,
+    params                TEXT    NOT NULL,    -- JSON
+    initial_capital       REAL    NOT NULL,
+    position_size_pct     REAL    NOT NULL,    -- 0.10 = 10% of equity per trade
+    commission_bps        REAL    NOT NULL DEFAULT 3.0,
+    slippage_bps          REAL    NOT NULL DEFAULT 5.0,
+    risk_free_rate        REAL    NOT NULL DEFAULT 0.065,
+    start_date            DATE    NOT NULL,
+    end_date              DATE    NOT NULL,
+    status                TEXT    NOT NULL,
+    error_msg             TEXT,
+    -- summary metrics (mirror backtest_runs)
+    total_return          REAL,
+    cagr                  REAL,
+    sharpe                REAL,
+    sortino               REAL,
+    max_drawdown          REAL,
+    win_rate              REAL,
+    num_trades            INTEGER,
+    num_symbols_traded    INTEGER,           -- distinct symbols that had at least one trade
+    started_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    finished_at           TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_pruns_started ON portfolio_runs(started_at DESC);
+
+CREATE TABLE IF NOT EXISTS portfolio_trades (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    portfolio_run_id  INTEGER NOT NULL REFERENCES portfolio_runs(id) ON DELETE CASCADE,
+    timestamp         TIMESTAMP NOT NULL,
+    symbol            TEXT    NOT NULL,
+    side              TEXT    NOT NULL,
+    qty               INTEGER NOT NULL,
+    price             REAL    NOT NULL,
+    trade_value       REAL    NOT NULL,
+    commission        REAL    NOT NULL,
+    slippage_cost     REAL    NOT NULL,
+    pnl               REAL,
+    duration_days     INTEGER,
+    trade_type        TEXT,
+    notes             TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_ptrades_run ON portfolio_trades(portfolio_run_id, timestamp);
+CREATE INDEX IF NOT EXISTS idx_ptrades_sym ON portfolio_trades(portfolio_run_id, symbol);
+
+CREATE TABLE IF NOT EXISTS portfolio_equity_curve (
+    portfolio_run_id  INTEGER NOT NULL REFERENCES portfolio_runs(id) ON DELETE CASCADE,
+    timestamp         TIMESTAMP NOT NULL,
+    equity            REAL    NOT NULL,
+    cash              REAL    NOT NULL,
+    position_value    REAL    NOT NULL,
+    drawdown_pct      REAL    NOT NULL,
+    PRIMARY KEY (portfolio_run_id, timestamp)
+);
 
 -- ─── Forward testing (paper trading on live yfinance data) ─────────
 -- A forward run is essentially "a backtest with a moving end-date." Each

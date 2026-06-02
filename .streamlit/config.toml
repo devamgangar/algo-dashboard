@@ -1,15 +1,22 @@
 # Streamlit configuration.
-#
-# fileWatcherType=none disables auto-reload on file changes. On a network
-# share (Z:\), the watcher's constant SMB stat calls add measurable latency
-# to every interaction. Harmless on Streamlit Cloud (cloud uses git pushes
-# for reloads, not file watching). Local tradeoff: edits to .py files won't
-# reload automatically — press R in the browser or click "Rerun" to refresh.
-#
+
+[server]
+# fileWatcherType=none disables auto-reload on file changes. Helpful when the
+# project lives on a slow filesystem (e.g. network share). Harmless on cloud.
+# Tradeoff: edits to .py files won't auto-reload — press R in the browser to refresh.
+fileWatcherType = "none"
+
 # NOTE: port is intentionally NOT set here. Streamlit Cloud requires the
 # default port 8501 for its health checks. For local runs on Windows where
 # Cursor IDE binds 8501, override via the command line:
 #     python -m streamlit run Home.py --server.port 8765
 
-[server]
-fileWatcherType = "none"
+[theme]
+# Minimal two-color design: deep navy on white. Navy used as the single
+# accent (buttons, links, headings); everything else stays neutral.
+base = "light"
+primaryColor = "#1e3a8a"             # navy — the only accent color
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f8fafc" # subtle off-white for sidebar contrast
+textColor = "#0f172a"                # near-black for body text
+font = "sans serif"

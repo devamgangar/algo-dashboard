@@ -154,6 +154,79 @@ class ForwardTrade(Base):
     notes:          Mapped[Optional[str]]    = mapped_column(Text, nullable=True)
 
 
+class PortfolioRun(Base):
+    __tablename__ = "portfolio_runs"
+
+    id:                  Mapped[int]              = mapped_column(Integer, primary_key=True, autoincrement=True)
+    strategy_id:         Mapped[int]              = mapped_column(Integer, ForeignKey("strategies.id"))
+    universe_label:      Mapped[str]              = mapped_column(String)
+    symbols:             Mapped[str]              = mapped_column(Text)        # JSON
+    exchange:            Mapped[str]              = mapped_column(String, default="NSE")
+    interval:            Mapped[str]              = mapped_column(String, default="1d")
+    data_source:         Mapped[str]              = mapped_column(String)
+    params:              Mapped[str]              = mapped_column(Text)        # JSON
+    initial_capital:     Mapped[float]            = mapped_column(Float)
+    position_size_pct:   Mapped[float]            = mapped_column(Float)
+    commission_bps:      Mapped[float]            = mapped_column(Float, default=3.0)
+    slippage_bps:        Mapped[float]            = mapped_column(Float, default=5.0)
+    risk_free_rate:      Mapped[float]            = mapped_column(Float, default=0.065)
+    start_date:          Mapped[date]             = mapped_column(Date)
+    end_date:            Mapped[date]             = mapped_column(Date)
+    status:              Mapped[str]              = mapped_column(String)
+    error_msg:           Mapped[Optional[str]]    = mapped_column(Text, nullable=True)
+    total_return:        Mapped[Optional[float]]  = mapped_column(Float, nullable=True)
+    cagr:                Mapped[Optional[float]]  = mapped_column(Float, nullable=True)
+    sharpe:              Mapped[Optional[float]]  = mapped_column(Float, nullable=True)
+    sortino:             Mapped[Optional[float]]  = mapped_column(Float, nullable=True)
+    max_drawdown:        Mapped[Optional[float]]  = mapped_column(Float, nullable=True)
+    win_rate:            Mapped[Optional[float]]  = mapped_column(Float, nullable=True)
+    num_trades:          Mapped[Optional[int]]    = mapped_column(Integer, nullable=True)
+    num_symbols_traded:  Mapped[Optional[int]]    = mapped_column(Integer, nullable=True)
+    started_at:          Mapped[datetime]         = mapped_column(DateTime, default=datetime.utcnow)
+    finished_at:         Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
+class PortfolioTrade(Base):
+    __tablename__ = "portfolio_trades"
+
+    id:               Mapped[int]              = mapped_column(Integer, primary_key=True, autoincrement=True)
+    portfolio_run_id: Mapped[int]              = mapped_column(Integer, ForeignKey("portfolio_runs.id", ondelete="CASCADE"))
+    timestamp:        Mapped[datetime]         = mapped_column(DateTime)
+    symbol:           Mapped[str]              = mapped_column(String)
+    side:             Mapped[str]              = mapped_column(String)
+    qty:              Mapped[int]              = mapped_column(Integer)
+    price:            Mapped[float]            = mapped_column(Float)
+    trade_value:      Mapped[float]            = mapped_column(Float)
+    commission:       Mapped[float]            = mapped_column(Float)
+    slippage_cost:    Mapped[float]            = mapped_column(Float)
+    pnl:              Mapped[Optional[float]]  = mapped_column(Float, nullable=True)
+    duration_days:    Mapped[Optional[int]]    = mapped_column(Integer, nullable=True)
+    trade_type:       Mapped[Optional[str]]    = mapped_column(String, nullable=True)
+    notes:            Mapped[Optional[str]]    = mapped_column(Text, nullable=True)
+
+
+class PortfolioEquityCurve(Base):
+    __tablename__ = "portfolio_equity_curve"
+
+    portfolio_run_id: Mapped[int]      = mapped_column(Integer, ForeignKey("portfolio_runs.id", ondelete="CASCADE"), primary_key=True)
+    timestamp:        Mapped[datetime] = mapped_column(DateTime, primary_key=True)
+    equity:           Mapped[float]    = mapped_column(Float)
+    cash:             Mapped[float]    = mapped_column(Float)
+    position_value:   Mapped[float]    = mapped_column(Float)
+    drawdown_pct:     Mapped[float]    = mapped_column(Float)
+
+
+class StrategyPreset(Base):
+    __tablename__ = "strategy_presets"
+
+    id:            Mapped[int]              = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name:          Mapped[str]              = mapped_column(String, unique=True)
+    base_strategy: Mapped[str]              = mapped_column(String)
+    params:        Mapped[str]              = mapped_column(Text)            # JSON string
+    description:   Mapped[Optional[str]]    = mapped_column(Text, nullable=True)
+    created_at:    Mapped[datetime]         = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class ForwardEquityCurve(Base):
     __tablename__ = "forward_equity_curve"
 

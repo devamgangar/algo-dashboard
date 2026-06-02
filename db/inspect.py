@@ -17,7 +17,11 @@ TABLE_COUNT_QUERIES = {
     "forward_trades":        "SELECT COUNT(*) FROM forward_trades",
     "forward_equity_curve":  "SELECT COUNT(*) FROM forward_equity_curve",
     "run_metrics":           "SELECT COUNT(*) FROM run_metrics",
+    "portfolio_runs":        "SELECT COUNT(*) FROM portfolio_runs",
+    "portfolio_trades":      "SELECT COUNT(*) FROM portfolio_trades",
+    "portfolio_equity_curve":"SELECT COUNT(*) FROM portfolio_equity_curve",
     "strategies":            "SELECT COUNT(*) FROM strategies",
+    "strategy_presets":      "SELECT COUNT(*) FROM strategy_presets",
     "trades":                "SELECT COUNT(*) FROM trades",
     "universe":              "SELECT COUNT(*) FROM universe",
 }

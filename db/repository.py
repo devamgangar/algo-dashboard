@@ -24,8 +24,12 @@ from db.models import (
     ForwardEquityCurve as ForwardEquityCurveModel,
     ForwardRun as ForwardRunModel,
     ForwardTrade as ForwardTradeModel,
+    PortfolioEquityCurve as PortfolioEquityCurveModel,
+    PortfolioRun as PortfolioRunModel,
+    PortfolioTrade as PortfolioTradeModel,
     RunMetric as RunMetricModel,
     Strategy as StrategyModel,
+    StrategyPreset as StrategyPresetModel,
     Trade as TradeModel,
 )
 from db.session import get_session
@@ -513,6 +517,299 @@ def delete_forward_run(forward_run_id: int) -> bool:
     with get_session() as session:
         result = session.execute(
             delete(ForwardRunModel).where(ForwardRunModel.id == forward_run_id)
+        )
+        return result.rowcount > 0
+
+
+# ──────────────────────────────────────────────────────────────────────────
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Portfolio backtests (one strategy across a basket of symbols)
+# ──────────────────────────────────────────────────────────────────────────
+
+def save_portfolio_result(
+    *,
+    strategy_name: str,
+    universe_label: str,
+    symbols: list[str],
+    exchange: str,
+    interval: str,
+    data_source: str,
+    params: dict,
+    initial_capital: float,
+    position_size_pct: float,
+    commission_bps: float,
+    slippage_bps: float,
+    risk_free_rate: float,
+    start_date,
+    end_date,
+    summary_metrics: dict,
+    num_symbols_traded: int,
+    trades: pd.DataFrame,
+    equity_curve: pd.DataFrame,
+) -> int:
+    """Persist a portfolio backtest result. Returns the new run id."""
+    strategy_cls = get_strategy(strategy_name)
+    strategy_id = upsert_strategy(strategy_cls)
+
+    with get_session() as session:
+        now = datetime.utcnow()
+        run = PortfolioRunModel(
+            strategy_id=strategy_id,
+            universe_label=universe_label,
+            symbols=json.dumps(symbols),
+            exchange=exchange,
+            interval=interval,
+            data_source=data_source,
+            params=json.dumps(params),
+            initial_capital=initial_capital,
+            position_size_pct=position_size_pct,
+            commission_bps=commission_bps,
+            slippage_bps=slippage_bps,
+            risk_free_rate=risk_free_rate,
+            start_date=start_date,
+            end_date=end_date,
+            status="completed",
+            error_msg=None,
+            total_return=summary_metrics.get("total_return"),
+            cagr=summary_metrics.get("cagr"),
+            sharpe=summary_metrics.get("sharpe"),
+            sortino=summary_metrics.get("sortino"),
+            max_drawdown=summary_metrics.get("max_drawdown"),
+            win_rate=summary_metrics.get("win_rate"),
+            num_trades=summary_metrics.get("num_trades"),
+            num_symbols_traded=num_symbols_traded,
+            started_at=now,
+            finished_at=now,
+        )
+        session.add(run)
+        session.flush()
+        run_id = run.id
+
+        if not trades.empty:
+            session.bulk_insert_mappings(
+                PortfolioTradeModel,
+                _trades_df_to_portfolio_mappings(trades, run_id),
+            )
+        if not equity_curve.empty:
+            session.bulk_insert_mappings(
+                PortfolioEquityCurveModel,
+                _equity_df_to_portfolio_mappings(equity_curve, run_id),
+            )
+
+        return run_id
+
+
+def _trades_df_to_portfolio_mappings(trades: pd.DataFrame, run_id: int) -> list[dict[str, Any]]:
+    out = []
+    for _, t in trades.iterrows():
+        out.append({
+            "portfolio_run_id": run_id,
+            "timestamp":        pd.Timestamp(t["timestamp"]).to_pydatetime(),
+            "symbol":           t["symbol"],
+            "side":             t["side"],
+            "qty":              int(t["qty"]),
+            "price":            float(t["price"]),
+            "trade_value":      float(t["trade_value"]),
+            "commission":       float(t["commission"]),
+            "slippage_cost":    float(t["slippage_cost"]),
+            "pnl":              float(t["pnl"]) if pd.notna(t["pnl"]) else None,
+            "duration_days":    int(t["duration_days"]) if pd.notna(t["duration_days"]) else None,
+            "trade_type":       t.get("trade_type"),
+            "notes":            t.get("notes"),
+        })
+    return out
+
+
+def _equity_df_to_portfolio_mappings(eq: pd.DataFrame, run_id: int) -> list[dict[str, Any]]:
+    out = []
+    for _, row in eq.iterrows():
+        out.append({
+            "portfolio_run_id": run_id,
+            "timestamp":        pd.Timestamp(row["timestamp"]).to_pydatetime(),
+            "equity":           float(row["equity"]),
+            "cash":             float(row["cash"]),
+            "position_value":   float(row["position_value"]),
+            "drawdown_pct":     float(row["drawdown_pct"]),
+        })
+    return out
+
+
+def list_portfolio_runs(limit: int = 50) -> list[dict]:
+    """Recent portfolio runs joined to strategy name. Summary only."""
+    with get_session() as session:
+        rows = session.execute(
+            select(PortfolioRunModel, StrategyModel.name)
+            .join(StrategyModel, PortfolioRunModel.strategy_id == StrategyModel.id)
+            .order_by(PortfolioRunModel.started_at.desc())
+            .limit(limit)
+        ).all()
+        return [
+            {
+                "id":                 r.id,
+                "strategy":           strategy_name,
+                "universe_label":     r.universe_label,
+                "symbols":            json.loads(r.symbols),
+                "start_date":         r.start_date,
+                "end_date":           r.end_date,
+                "status":             r.status,
+                "total_return":       r.total_return,
+                "cagr":               r.cagr,
+                "sharpe":             r.sharpe,
+                "max_drawdown":       r.max_drawdown,
+                "win_rate":           r.win_rate,
+                "num_trades":         r.num_trades,
+                "num_symbols_traded": r.num_symbols_traded,
+                "started_at":         r.started_at,
+            }
+            for r, strategy_name in rows
+        ]
+
+
+def get_portfolio_run(run_id: int) -> Optional[dict]:
+    """Full portfolio run incl. trades + equity curve DataFrames."""
+    with get_session() as session:
+        row = session.execute(
+            select(PortfolioRunModel, StrategyModel.name, StrategyModel.version)
+            .join(StrategyModel, PortfolioRunModel.strategy_id == StrategyModel.id)
+            .where(PortfolioRunModel.id == run_id)
+        ).one_or_none()
+        if row is None:
+            return None
+        run, strategy_name, strategy_version = row
+
+        conn = session.connection()
+        trades_df = pd.read_sql_query(
+            text(
+                "SELECT timestamp, symbol, side, qty, price, trade_value, "
+                "commission, slippage_cost, pnl, duration_days, trade_type, notes "
+                "FROM portfolio_trades WHERE portfolio_run_id = :rid ORDER BY timestamp"
+            ),
+            conn,
+            params={"rid": run_id},
+        )
+        equity_df = pd.read_sql_query(
+            text(
+                "SELECT timestamp, equity, cash, position_value, drawdown_pct "
+                "FROM portfolio_equity_curve WHERE portfolio_run_id = :rid ORDER BY timestamp"
+            ),
+            conn,
+            params={"rid": run_id},
+        )
+
+        return {
+            "id":                 run.id,
+            "strategy_name":      strategy_name,
+            "strategy_version":   strategy_version,
+            "universe_label":     run.universe_label,
+            "symbols":            json.loads(run.symbols),
+            "exchange":           run.exchange,
+            "interval":           run.interval,
+            "data_source":        run.data_source,
+            "params":             json.loads(run.params),
+            "initial_capital":    run.initial_capital,
+            "position_size_pct":  run.position_size_pct,
+            "commission_bps":     run.commission_bps,
+            "slippage_bps":       run.slippage_bps,
+            "risk_free_rate":     run.risk_free_rate,
+            "start_date":         run.start_date,
+            "end_date":           run.end_date,
+            "status":             run.status,
+            "started_at":         run.started_at,
+            "finished_at":        run.finished_at,
+            "summary_metrics": {
+                "total_return": run.total_return,
+                "cagr":         run.cagr,
+                "sharpe":       run.sharpe,
+                "sortino":      run.sortino,
+                "max_drawdown": run.max_drawdown,
+                "win_rate":     run.win_rate,
+                "num_trades":   run.num_trades,
+            },
+            "num_symbols_traded": run.num_symbols_traded,
+            "trades":             trades_df,
+            "equity_curve":       equity_df,
+        }
+
+
+def delete_portfolio_run(run_id: int) -> bool:
+    with get_session() as session:
+        result = session.execute(
+            delete(PortfolioRunModel).where(PortfolioRunModel.id == run_id)
+        )
+        return result.rowcount > 0
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Strategy presets (user-defined param bundles on top of a base strategy)
+# ──────────────────────────────────────────────────────────────────────────
+
+def create_preset(
+    *,
+    name: str,
+    base_strategy: str,
+    params: dict,
+    description: Optional[str] = None,
+) -> int:
+    """Insert a new strategy preset. Returns the new id.
+
+    Raises sqlalchemy.exc.IntegrityError if `name` collides with an existing
+    preset (UNIQUE constraint). Caller is expected to validate `params` are
+    accepted by `base_strategy` before calling (e.g., by instantiating).
+    """
+    with get_session() as session:
+        row = StrategyPresetModel(
+            name=name,
+            base_strategy=base_strategy,
+            params=json.dumps(params),
+            description=description,
+        )
+        session.add(row)
+        session.flush()
+        return row.id
+
+
+def list_presets() -> list[dict]:
+    """All presets ordered by creation, with params parsed back to dict."""
+    with get_session() as session:
+        rows = session.execute(
+            select(StrategyPresetModel).order_by(StrategyPresetModel.created_at.desc())
+        ).scalars().all()
+        return [
+            {
+                "id":            r.id,
+                "name":          r.name,
+                "base_strategy": r.base_strategy,
+                "params":        json.loads(r.params),
+                "description":   r.description,
+                "created_at":    r.created_at,
+            }
+            for r in rows
+        ]
+
+
+def get_preset(preset_id: int) -> Optional[dict]:
+    with get_session() as session:
+        r = session.execute(
+            select(StrategyPresetModel).where(StrategyPresetModel.id == preset_id)
+        ).scalar_one_or_none()
+        if r is None:
+            return None
+        return {
+            "id":            r.id,
+            "name":          r.name,
+            "base_strategy": r.base_strategy,
+            "params":        json.loads(r.params),
+            "description":   r.description,
+            "created_at":    r.created_at,
+        }
+
+
+def delete_preset(preset_id: int) -> bool:
+    with get_session() as session:
+        result = session.execute(
+            delete(StrategyPresetModel).where(StrategyPresetModel.id == preset_id)
         )
         return result.rowcount > 0
 

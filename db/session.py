@@ -20,13 +20,15 @@ DB_PATH = Path(__file__).resolve().parent.parent / "data" / "backtest.db"
 
 
 def _ensure_db_initialized() -> None:
-    """Idempotent: create the DB and apply the schema if the file is missing.
+    """Idempotent: ensure the DB exists AND has all current tables.
 
-    Schema uses CREATE TABLE IF NOT EXISTS, so it's safe even if partially
-    initialized. Imported here (not at module top) to avoid circular imports.
+    The schema uses CREATE TABLE IF NOT EXISTS throughout, so this is safe to
+    run on every startup. Critical for picking up new tables added between
+    schema versions (e.g., strategy_presets, portfolio_runs) without forcing
+    the user to wipe their DB.
+
+    Run cost is trivial (a handful of CREATE IF NOT EXISTS statements).
     """
-    if DB_PATH.exists():
-        return
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     from db.init_db import init_db
     init_db()

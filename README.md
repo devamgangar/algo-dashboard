@@ -4,16 +4,7 @@ A multi-page Streamlit dashboard for backtesting, parameter sweeping, and paper-
 
 Built as a learning project with depth: every layer is intentionally separable so the same code can swap data sources (yfinance ↔ Groww), persistence backends (SQLite ↔ Postgres), or backtest engines (vectorbt ↔ backtrader) without rewriting business logic.
 
-> **Live demo:** https://algo-dashboard.streamlit.app
->
->  Algo Trading Dashboard — Streamlit (multi-page) · Python · SQLite/SQLAlchemy · 
-  ▎ vectorbt · Plotly
-  ▎ Built and deployed a full backtesting + paper-trading platform for Indian equity
-  ▎  strategies. Pluggable strategy framework (4 strategies: SMA, RSI, Bollinger, 
-  ▎ MACD); RFR-aware risk metrics; parameter-sweep heatmaps with CSV export; 
-  ▎ multi-run comparison views with normalized equity curves; daily forward-testing 
-  ▎ with scheduled paper-trade ticks. Live: https://algo-dashboard.streamlit.app
-  ▎ github.com/devamgangar/algo-dashboard
+> **Live demo:** _add your Streamlit Cloud URL here after deploying_
 
 ---
 
