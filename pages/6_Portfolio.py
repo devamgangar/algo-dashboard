@@ -59,14 +59,31 @@ with col_uni:
         "Symbol universe",
         options=list(UNIVERSES.keys()),
         index=0,
-        help="Hardcoded list of constituents. Stocks that fail data fetch are skipped silently.",
+        help="Pick the base universe; you can deselect specific symbols below.",
     )
     universe_symbols = get_universe(universe_label)
-    st.caption(
-        f"**{len(universe_symbols)} symbols.** First 10: "
-        + ", ".join(universe_symbols[:10])
-        + (", ..." if len(universe_symbols) > 10 else "")
+
+    # Symbol multi-select — defaults to ALL symbols pre-selected so the common
+    # "just run the whole universe" path is one click. Deselect any to subset.
+    selected_symbols = st.multiselect(
+        f"Symbols to include ({len(universe_symbols)} available)",
+        options=universe_symbols,
+        default=universe_symbols,
+        key="pf_symbols",
+        help="Click the × on any symbol to exclude it. Use the buttons below for bulk select/clear.",
     )
+
+    bcol1, bcol2, bcap = st.columns([1, 1, 3])
+    with bcol1:
+        if st.button("Select all", key="pf_sym_all"):
+            st.session_state["pf_symbols"] = list(universe_symbols)
+            st.rerun()
+    with bcol2:
+        if st.button("Clear all", key="pf_sym_clr"):
+            st.session_state["pf_symbols"] = []
+            st.rerun()
+    with bcap:
+        st.caption(f"**{len(selected_symbols)} of {len(universe_symbols)} selected**")
 
     exchange = st.selectbox("Exchange", options=["NSE", "BSE"], index=0, key="pf_exchange")
     today = date.today()
@@ -224,6 +241,16 @@ if run_clicked:
     if start_date >= end_date:
         st.error("End date must be after start date.")
         st.stop()
+    if not selected_symbols:
+        st.error("Select at least one symbol to include.")
+        st.stop()
+
+    # Build a descriptive universe label that reflects subsetting
+    universe_label_for_run = (
+        universe_label
+        if len(selected_symbols) == len(universe_symbols)
+        else f"{universe_label} ({len(selected_symbols)} of {len(universe_symbols)})"
+    )
 
     progress = st.progress(0.0, text="Starting portfolio backtest...")
 
@@ -231,10 +258,11 @@ if run_clicked:
         progress.progress(current / total, text=f"Fetching {current}/{total}: {symbol}")
 
     try:
-        with st.spinner(f"Running {strategy_cls.display_name} on {universe_label}..."):
+        with st.spinner(f"Running {strategy_cls.display_name} on {len(selected_symbols)} symbols..."):
             run_id, result = run_portfolio_and_save(
                 strategy_name=strategy_name,
-                universe_label=universe_label,
+                universe_label=universe_label_for_run,
+                symbols=selected_symbols,
                 exchange=exchange,
                 interval=interval,
                 data_source="yfinance",
