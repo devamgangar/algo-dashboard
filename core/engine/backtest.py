@@ -335,6 +335,10 @@ def run_backtest(
         slippage=slippage_bps / 10_000.0,
         size_granularity=1,
         freq=_VBT_FREQ_MAP[interval],
+        # Long-only enforcement. vectorbt's default direction='all' would let
+        # exit signals open SHORT positions when flat — all 4 strategies are
+        # documented as long-only, so lock that in here.
+        direction="longonly",
         **sizing_kwargs,
     )
 

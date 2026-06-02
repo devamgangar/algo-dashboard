@@ -16,7 +16,12 @@ import pandas as pd  # noqa: E402
 import streamlit as st  # noqa: E402
 
 from core.analytics.metrics import metrics_to_table  # noqa: E402
-from core.analytics.plots import drawdown_chart, equity_curve_chart  # noqa: E402
+from core.analytics.plots import (  # noqa: E402
+    drawdown_chart,
+    equity_curve_chart,
+    price_with_signals_chart,
+)
+from core.data import get_ohlcv  # noqa: E402
 from core.strategies import list_strategies  # noqa: E402
 from core.ui import inject_base_style, page_header  # noqa: E402
 from services.backtest_service import run_and_save  # noqa: E402
@@ -148,6 +153,26 @@ def _show_results(run_id: int, result, from_cache: bool) -> None:
         width="stretch",
     )
     st.plotly_chart(drawdown_chart(result.equity_curve), width="stretch")
+
+    # Price + signal overlay — re-fetch OHLCV from cache (typically <50ms hit).
+    try:
+        ohlcv = get_ohlcv(
+            symbol=result.symbol,
+            start=result.start_date,
+            end=result.end_date,
+            interval=result.interval,
+            exchange=result.exchange,
+            source=result.data_source,
+        )
+        st.plotly_chart(
+            price_with_signals_chart(
+                ohlcv, result.trades,
+                title=f"{result.symbol} price with trade signals",
+            ),
+            width="stretch",
+        )
+    except Exception as exc:
+        st.info(f"Price overlay unavailable: {exc}")
 
     with st.expander("Trade log", expanded=False):
         if result.trades.empty:
