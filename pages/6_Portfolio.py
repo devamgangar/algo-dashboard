@@ -63,17 +63,16 @@ with col_uni:
     )
     universe_symbols = get_universe(universe_label)
 
-    # Symbol multi-select — defaults to ALL symbols pre-selected so the common
-    # "just run the whole universe" path is one click. Deselect any to subset.
-    selected_symbols = st.multiselect(
-        f"Symbols to include ({len(universe_symbols)} available)",
-        options=universe_symbols,
-        default=universe_symbols,
-        key="pf_symbols",
-        help="Click the × on any symbol to exclude it. Use the buttons below for bulk select/clear.",
-    )
+    # Pre-initialize the symbol selection so the bulk-action buttons can mutate
+    # session_state BEFORE the multiselect widget claims the key. (Streamlit
+    # disallows setting `st.session_state[key]` after a widget with that key
+    # has been instantiated in the current script run.)
+    if "pf_symbols" not in st.session_state:
+        st.session_state["pf_symbols"] = list(universe_symbols)
 
-    bcol1, bcol2, bcap = st.columns([1, 1, 3])
+    # Bulk-action buttons render FIRST so their handlers can update state
+    # before the multiselect reads it.
+    bcol1, bcol2, _bcap_slot = st.columns([1, 1, 3])
     with bcol1:
         if st.button("Select all", key="pf_sym_all"):
             st.session_state["pf_symbols"] = list(universe_symbols)
@@ -82,8 +81,16 @@ with col_uni:
         if st.button("Clear all", key="pf_sym_clr"):
             st.session_state["pf_symbols"] = []
             st.rerun()
-    with bcap:
-        st.caption(f"**{len(selected_symbols)} of {len(universe_symbols)} selected**")
+
+    # Multiselect — reads from session_state via key (no `default` because
+    # state is pre-initialized above; passing both would conflict).
+    selected_symbols = st.multiselect(
+        f"Symbols to include ({len(universe_symbols)} available)",
+        options=universe_symbols,
+        key="pf_symbols",
+        help="Click the × on any symbol to exclude it. Use the buttons above for bulk select/clear.",
+    )
+    st.caption(f"**{len(selected_symbols)} of {len(universe_symbols)} selected**")
 
     exchange = st.selectbox("Exchange", options=["NSE", "BSE"], index=0, key="pf_exchange")
     today = date.today()
