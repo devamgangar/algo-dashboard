@@ -16,10 +16,15 @@ import pandas as pd  # noqa: E402
 import streamlit as st  # noqa: E402
 
 from core.strategies import list_strategies  # noqa: E402
+from core.ui import inject_base_style, page_header  # noqa: E402
 
 st.set_page_config(page_title="Strategies", layout="wide")
 st.session_state["__current_page"] = "strategies"
-st.title("Strategies")
+inject_base_style()
+page_header(
+    "Strategies",
+    "Pluggable strategy registry. Drop a file under core/strategies/ with @register_strategy and it shows up here.",
+)
 
 strategies = list_strategies()
 
@@ -30,7 +35,8 @@ if not strategies:
     )
     st.stop()
 
-st.caption(f"{len(strategies)} strategy(ies) registered")
+_n = len(strategies)
+st.markdown(f"**{_n} {'strategy' if _n == 1 else 'strategies'} registered**")
 
 rows = []
 for cls in strategies:
@@ -44,7 +50,7 @@ for cls in strategies:
 
 st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
 
-st.markdown("---")
+st.divider()
 st.subheader("Strategy details")
 
 selected_name = st.selectbox(
@@ -55,12 +61,13 @@ selected_name = st.selectbox(
 
 selected = next(c for c in strategies if c.name == selected_name)
 
-col1, col2 = st.columns([2, 1])
-with col1:
-    st.markdown(f"**{selected.display_name}**  (`{selected.name}` v{selected.version})")
-    st.write(selected.description or "_No description provided._")
-with col2:
-    st.markdown("**Default parameters**")
-    st.json(selected.default_params)
-    st.markdown("**Position sizing**")
-    st.json(selected.sizing)
+with st.container(border=True):
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        st.markdown(f"**{selected.display_name}**  (`{selected.name}` v{selected.version})")
+        st.write(selected.description or "_No description provided._")
+    with col2:
+        st.markdown("**Default parameters**")
+        st.json(selected.default_params)
+        st.markdown("**Position sizing**")
+        st.json(selected.sizing)

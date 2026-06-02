@@ -18,12 +18,16 @@ from core.analytics.plots import (  # noqa: E402
     price_with_signals_chart,
 )
 from core.data import get_ohlcv  # noqa: E402
+from core.ui import inject_base_style, page_header  # noqa: E402
 from db import repository as repo  # noqa: E402
 
 st.set_page_config(page_title="Results", layout="wide")
 st.session_state["__current_page"] = "results"
-st.title("Results")
-st.caption("Browse past backtest runs. Filter, then select rows for detail or comparison.")
+inject_base_style()
+page_header(
+    "Results",
+    "Browse past backtest runs. Filter, then select rows for detail or comparison.",
+)
 
 
 # ─── Load runs ──────────────────────────────────────────────────────────────

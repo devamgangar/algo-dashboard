@@ -13,15 +13,16 @@ import streamlit as st  # noqa: E402
 
 from core.analytics.plots import metric_heatmap  # noqa: E402
 from core.strategies import list_strategies  # noqa: E402
+from core.ui import inject_base_style, page_header  # noqa: E402
 from services.sweep_service import run_sweep_and_collect  # noqa: E402
 
 
 st.set_page_config(page_title="Parameter Sweep", layout="wide")
 st.session_state["__current_page"] = "sweep"
-st.title("Parameter Sweep")
-st.caption(
-    "Run a grid of parameter combinations and see which perform best. "
-    "Heatmap when exactly 2 parameters are swept; ranked table otherwise."
+inject_base_style()
+page_header(
+    "Parameter Sweep",
+    "Run a grid of parameter combinations and see which perform best. Heatmap when exactly 2 parameters are swept; ranked table otherwise.",
 )
 
 

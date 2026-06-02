@@ -13,6 +13,7 @@ import streamlit as st  # noqa: E402
 
 from core.analytics.plots import drawdown_chart, equity_curve_chart  # noqa: E402
 from core.strategies import list_strategies  # noqa: E402
+from core.ui import inject_base_style, page_header  # noqa: E402
 from db import repository as repo  # noqa: E402
 from services.forward_service import (  # noqa: E402
     start_forward_run,
@@ -24,10 +25,10 @@ from services.forward_service import (  # noqa: E402
 
 st.set_page_config(page_title="Forward Testing", layout="wide")
 st.session_state["__current_page"] = "forward_testing"
-st.title("Forward Testing")
-st.caption(
-    "Paper-trade strategies against unfolding daily data. Each forward run "
-    "is a virtual portfolio that ticks once per day using yfinance closes."
+inject_base_style()
+page_header(
+    "Forward Testing",
+    "Paper-trade strategies against unfolding daily data. Each forward run is a virtual portfolio that ticks once per day using yfinance closes.",
 )
 
 

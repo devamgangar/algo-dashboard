@@ -18,10 +18,12 @@ import streamlit as st  # noqa: E402
 from core.analytics.metrics import metrics_to_table  # noqa: E402
 from core.analytics.plots import drawdown_chart, equity_curve_chart  # noqa: E402
 from core.strategies import list_strategies  # noqa: E402
+from core.ui import inject_base_style, page_header  # noqa: E402
 from services.backtest_service import run_and_save  # noqa: E402
 
 
 st.set_page_config(page_title="Backtest", layout="wide")
+inject_base_style()
 
 # Clear stale results if the user just landed here from a different page.
 # (Within-page interactions like expanders / dropdowns leave last_run alone,
@@ -31,8 +33,7 @@ st.session_state["__current_page"] = "backtest"
 if _prev_page != "backtest":
     st.session_state.pop("last_run", None)
 
-st.title("Backtest")
-st.caption("Configure a backtest, run it, and save the results.")
+page_header("Backtest", "Configure a backtest, run it, and save the results.")
 
 
 # ─── Strategy selection (OUTSIDE the form so changing it re-renders params) ──
