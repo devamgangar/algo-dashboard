@@ -4,7 +4,7 @@ A multi-page Streamlit dashboard for backtesting, parameter sweeping, and paper-
 
 Built as a learning project with depth: every layer is intentionally separable so the same code can swap data sources (yfinance ↔ Groww), persistence backends (SQLite ↔ Postgres), or backtest engines (vectorbt ↔ backtrader) without rewriting business logic.
 
-> **Live demo:** _add your Streamlit Cloud URL here after deploying_
+> **Live demo:** https://algo-dashboard.streamlit.app/
 
 ---
 
